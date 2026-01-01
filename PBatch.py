@@ -1,10 +1,10 @@
 import argparse
 import csv 
-import importlib
+import importlib.util
 import numpy as np 
 import os 
-# from concurrent.futures import ProcessPoolExecutor, as_completed
-# from tqdm import tqdm
+import sys
+from pathlib import Path
 from tqdm.contrib.concurrent import process_map  # or thread_map
 
 '''
@@ -15,6 +15,24 @@ The main() function call should return data as a dictionary. Failure to do so wi
 '''
 
 # Print welcome script ... mention assumptions with data format, all input data is assumed to be floats, assumed output data as dictionarys
+
+def load_main_from_path(script_path: str):
+    script_path = Path(script_path).resolve()
+
+    module_name = script_path.stem  # e.g. "myscript"
+    spec = importlib.util.spec_from_file_location(module_name, script_path)
+
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot load module from {script_path}")
+
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module  # important for multiprocessing
+    spec.loader.exec_module(module)
+
+    if not hasattr(module, "main"):
+        raise AttributeError(f"{script_path} has no main() function")
+
+    return module.main
 
 # Creating parser
 parser = argparse.ArgumentParser(description="Batch runs python python script employing multip processing and saving output data as numpy file")
@@ -29,7 +47,8 @@ parser.add_argument("--skipTrial", type = int, default = 0, help = "0 - Run chec
 args = parser.parse_args()
 
 # Extracting arguments
-runScript = args.runScript.replace(".py","") #Dont need the .py portion if it exists
+# runScript = args.runScript.replace(".py","") #Dont need the .py portion if it exists
+runScript = args.runScript
 batchCases = args.batchCases 
 NUMPAR = args.parallel 
 skipTrial = bool(args.skipTrial) #boolean indicating whether or not to skip trial run 
@@ -37,9 +56,8 @@ skipTrial = bool(args.skipTrial) #boolean indicating whether or not to skip tria
 # Preparing to batch...
 if __name__ == '__main__':
     print("Loading in files preparing to batch...") 
-try:
-    mod = importlib.import_module(runScript)
-    main = mod.main #Function to be batched 
+try: 
+    main = load_main_from_path(runScript)
     if __name__ == '__main__':
         print("Function 'main' loaded from runScript sucessfully.")
 except:
