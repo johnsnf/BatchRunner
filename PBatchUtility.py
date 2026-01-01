@@ -1,6 +1,7 @@
 import csv 
 import numpy as np
 from scipy.stats import qmc
+import random
 
 def scaledLHS(samplesCount, valRange):
     '''
@@ -21,14 +22,31 @@ def scaledLHS(samplesCount, valRange):
     
     return samples 
 
+# def defaultNameFiles(samples):
+#     F = [] 
+#     for s in samples:
+#         f = "BatchRun" 
+#         for data in s:
+#             f += f"_{data:.02f}" 
+#         F.append(f)
+#     return F 
+
 def defaultNameFiles(samples):
+    
     F = [] 
-    for s in samples:
-        f = "BatchRun" 
-        for data in s:
-            f += f"_{data:.02f}" 
-        F.append(f)
+    rowCount = samples.shape[0] 
+    randVals = [] 
+    for _ in range(rowCount*5):
+        randVals.append(random.randint(10000,99999))
+    
+    randVals = np.array(randVals)
+    randVals = np.unique(randVals)
+    
+    for i in range(rowCount):
+        F.append("BatchRun_"+str(randVals[i])) 
+
     return F 
+
 
 def joinLists(samples,names,headers):
     '''
@@ -49,25 +67,124 @@ def joinLists(samples,names,headers):
     return outData
 
 
+def scaledLIN(NumSamples, valRange_LIN):
+    samples = np.zeros((NumSamples,valRange_LIN.shape[0]))
+    for i in range(valRange_LIN.shape[0]):
+        start = np.min(valRange_LIN[i,:])
+        end = np.max(valRange_LIN[i,:])
+        samples[:,i] = np.linspace(start,end,NumSamples).reshape((NumSamples,))
+
+    return samples 
+
+def joinSamples(samplesLHS, samplesLIN, valRange_CON, valSelect, meshgrid = True):
+    
+    #Building mesh grid:
+    LHSIndex = np.arange(0,samplesLHS.shape[0],1, dtype = np.int64)
+    if samplesLHS.shape[1] >= 1:
+        LinVars = [LHSIndex]
+    else:
+        LinVars = []
+    for i in range(samplesLIN.shape[1]):
+        LinVars.append(samplesLIN[:,i]) 
+    
+    MeshedGrid = list(np.meshgrid(*LinVars))
+    
+    meshShape = MeshedGrid[0].shape
+    eleCount = 1
+    for dim in meshShape:
+        eleCount *= dim 
+    
+    if len(MeshedGrid) > 1:
+        
+        #Extracting index portion of MeshedGrid
+        if samplesLHS.shape[1] >= 1:
+            LHSIndex = MeshedGrid[0].reshape((eleCount,1))
+            MeshedGrid.pop(0) #dropping it from main list 
+        
+        if not isinstance(MeshedGrid,list):
+            MeshedGrid = [MeshedGrid]     
+        
+        #Rebuilding samplesLIN:
+        for i in range(len(MeshedGrid)):
+            MeshedGrid[i] = MeshedGrid[i].reshape((eleCount,1))
+        samplesLIN_final = np.concatenate(MeshedGrid,axis = 1) #Rejoining into full matrix 
+        
+        #Rebuilding samplesLHS with new index set:
+        samplesLHS_final = np.zeros((eleCount,samplesLHS.shape[1])) 
+        for i in range(samplesLHS.shape[1]):
+            samplesLHS_final[:,i] = samplesLHS[LHSIndex,i].reshape((eleCount,))
+    else:
+        samplesLHS_final = samplesLHS
+        samplesLIN_final = samplesLIN 
+    
+    #Stitching together all sample matrix sets  
+    i_LHS = 0 
+    i_LIN = 0 
+    i_CON = 0 
+    samples = np.zeros((eleCount,len(valSelect)))
+    for i in range(len(valSelect)):
+        if valSelect[i] == 'LHS':
+            samples[:,i] = samplesLHS_final[:,i_LHS]
+            i_LHS += 1
+        elif valSelect[i] == 'LIN':
+            samples[:,i] = samplesLIN_final[:,i_LIN]
+            i_LIN += 1
+        elif valSelect[i] == 'CON':
+            samples[:,i] = np.ones((eleCount,)) * valRange_CON[i_CON]
+            i_CON += 1
+    
+    samples = np.unique(samples,axis = 0)
+
+    return samples
+
+
 def run():
     print("Generating a batch run file leveraging LHS sampling...")
     NumVar = int(input("How many variables are there?\n>> "))
-    NumSamples = int(input("How many samples would you like?\n>> "))
+    NumSamples = int(input("How many samples would you like (LHS only)?\n>> "))
     print("Iterating through each variable...") 
     Headers = ["Variable Names"] 
     valRange = np.zeros((NumVar,2)) 
+    valSelect = []
     for i in range(NumVar):
         print(f"Processing variable {i}")
+        valSelectStrat = str(input("Data selection strategy (LHS - Latin Hypercube, LIN - linspace, CON - constant)\n>>"))
         Name = str(input("What would you like to call the variable? \n>> ")) 
-        Lower = float(input("What is the lower bounds of this variable\n>> "))
-        Upper = float(input("What is the upper bounds of this variable\n>> "))
         
-        valRange[i,0] = Lower 
-        valRange[i,1] = Upper 
+        if valSelectStrat == 'LHS' or valSelectStrat == 'LIN':
+            Lower = float(input("What is the lower bounds of this variable\n>> "))
+            Upper = float(input("What is the upper bounds of this variable\n>> "))
+            valRange[i,0] = Lower 
+            valRange[i,1] = Upper 
+        else:
+            Lower = float(input("What is the constant value\n>> "))
+            valRange[i,0] = Lower 
+        
         Headers.append(Name) 
+        valSelect.append(valSelectStrat)
+    
+    if len(valSelect) == 1 and valSelect[0] == 'CON':
+        raise ValueError("Cannot create a batch script for a single constant value run.")
+    
+    #Extracting entries for LHS
+    boolMask = np.array([b == 'LHS' for b in valSelect],dtype = np.bool)
+    valRange_LHS = valRange[boolMask,:]
+    
+    #Extracting entries for LIN
+    boolMask = np.array([b == 'LIN' for b in valSelect],dtype = np.bool)
+    valRange_LIN = valRange[boolMask,:]
+    
+    #Extracting entries for CON
+    boolMask = np.array([b == 'CON' for b in valSelect],dtype = np.bool)
+    valRange_CON = valRange[boolMask,0]
     
     print("Generating batch cases...") 
-    samples = scaledLHS(NumSamples, valRange) 
+    
+    samplesLHS = scaledLHS(NumSamples, valRange_LHS) #LHS cases 
+    samplesLIN = scaledLIN(NumSamples, valRange_LIN) #LIN cases 
+    
+    samples = joinSamples(samplesLHS, samplesLIN, valRange_CON, valSelect)
+    
     names = defaultNameFiles(samples) 
     
     outData = joinLists(samples,names,Headers)
@@ -81,8 +198,13 @@ def run():
         writer.writerows(outData)
     
     
+    return samples
+    
+    
 
 if __name__ == "__main__":
-    run()
+    a = run()
+    # print(a)
+    # print(a.shape)
 
     
