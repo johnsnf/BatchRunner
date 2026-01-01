@@ -94,15 +94,18 @@ def runCase(runIndex):
     parameters.pop(0)
     
     pNew = [float(p) for p in parameters] #Casting all varibales to floats 
+    
+    #Converting data into dictionary so it is passed to function as KWARGS
+    runParam = {}
+    for i in range(len(pNew)):
+        runParam[headerInfo[i]] = pNew[i]  #These can be treated as kwargs
 
-    returnData = main(*pNew) #Handing all data over 
+    # returnData = main(*pNew) #Handing all data over 
+    returnData = main(**runParam)
     if not isinstance(returnData,dict):
         raise TypeError("Expected function to return dictionary")
     
-    #Parse and save
-    runParam = {}
-    for i in range(len(pNew)):
-        runParam[headerInfo[i]] = pNew[i] 
+
         
     mergedDictionary = runParam | returnData 
     
