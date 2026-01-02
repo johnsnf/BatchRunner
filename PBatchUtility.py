@@ -2,6 +2,13 @@ import csv
 import numpy as np
 from scipy.stats import qmc
 import random
+import argparse
+
+
+parser = argparse.ArgumentParser(description="Creates run file for batching python jobs. These run files are generated either by linspace/LHS/constant of specified variable/design space.")
+parser.add_argument("--test", type = bool, default = 0, help = "Test flag for proving functionality")
+args = parser.parse_args()
+testFlag = args.test
 
 def scaledLHS(samplesCount, valRange):
     '''
@@ -141,11 +148,12 @@ def joinSamples(samplesLHS, samplesLIN, valRange_CON, valSelect, meshgrid = True
 def run():
     print("Generating a batch run file leveraging LHS sampling...")
     NumVar = int(input("How many variables are there?\n>> "))
-    NumSamples = int(input("How many samples would you like (LHS only)?\n>> "))
+    NumSamples = int(input("How many samples would you like (LHS)?\n>> "))
     print("Iterating through each variable...") 
     Headers = ["Variable Names"] 
     valRange = np.zeros((NumVar,2)) 
     valSelect = []
+    # linCount = []
     for i in range(NumVar):
         print(f"Processing variable {i}")
         valSelectStrat = str(input("Data selection strategy (LHS - Latin Hypercube, LIN - linspace, CON - constant)\n>>"))
@@ -156,6 +164,12 @@ def run():
             Upper = float(input("What is the upper bounds of this variable\n>> "))
             valRange[i,0] = Lower 
             valRange[i,1] = Upper 
+        # elif valSelectStrat == 'LIN':
+        #     #Need to add this section otherwise LHS and LIN are the same. Need to seperate
+        #     Lower = float(input("What is the lower bounds of this variable\n>> "))
+        #     Upper = float(input("What is the upper bounds of this variable\n>> "))
+        #     valRange[i,0] = Lower 
+        #     valRange[i,1] = Upper 
         else:
             Lower = float(input("What is the constant value\n>> "))
             valRange[i,0] = Lower 
@@ -193,9 +207,14 @@ def run():
     
     #Writing CSV
     fileName = str(input("What would you like to name the output batch file?\n>> "))
-    with open(fileName, "wt") as fp:
-        writer = csv.writer(fp, delimiter=",")
-        writer.writerows(outData)
+    
+    
+    if not testFlag:
+        with open(fileName, "wt") as fp:
+            writer = csv.writer(fp, delimiter=",")
+            writer.writerows(outData)
+    else:
+        print(f'Samples shape: *{samples.shape}*')
     
     
     return samples
