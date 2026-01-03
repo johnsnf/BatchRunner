@@ -74,12 +74,12 @@ def joinLists(samples,names,headers):
     return outData
 
 
-def scaledLIN(NumSamples, valRange_LIN):
-    samples = np.zeros((NumSamples,valRange_LIN.shape[0]))
+def scaledLIN(NumSamples, valRange_LIN, sampleCount):
+    samples = []
     for i in range(valRange_LIN.shape[0]):
         start = np.min(valRange_LIN[i,:])
         end = np.max(valRange_LIN[i,:])
-        samples[:,i] = np.linspace(start,end,NumSamples).reshape((NumSamples,))
+        samples.append(np.linspace(start,end,sampleCount[i]).reshape((sampleCount[i],)))
 
     return samples 
 
@@ -91,8 +91,10 @@ def joinSamples(samplesLHS, samplesLIN, valRange_CON, valSelect, meshgrid = True
         LinVars = [LHSIndex]
     else:
         LinVars = []
-    for i in range(samplesLIN.shape[1]):
-        LinVars.append(samplesLIN[:,i]) 
+    # for i in range(samplesLIN.shape[1]):
+    #     LinVars.append(samplesLIN[:,i]) 
+    for i in range(len(samplesLIN)):
+        LinVars.append(samplesLIN[i])
     
     MeshedGrid = list(np.meshgrid(*LinVars))
     
@@ -122,7 +124,26 @@ def joinSamples(samplesLHS, samplesLIN, valRange_CON, valSelect, meshgrid = True
             samplesLHS_final[:,i] = samplesLHS[LHSIndex,i].reshape((eleCount,))
     else:
         samplesLHS_final = samplesLHS
-        samplesLIN_final = samplesLIN 
+        
+        if isinstance(samplesLIN,list):
+            # if len(samplesLIN) > 1:
+            #     samplesLIN_final = samplesLIN[0]
+            #     samplesLIN_final = samplesLIN_final.reshape((samplesLIN_final.shape[0],1))
+            # else:
+            #     samplesLIN_final = samplesLIN[0]
+            
+            print(samplesLIN)
+            
+            if len(samplesLIN) >= 1:
+                samplesLIN_final = samplesLIN[0]
+                samplesLIN_final = samplesLIN_final.reshape((samplesLIN_final.shape[0],1))
+            else:
+                samplesLIN_final = []
+        else:
+            samplesLIN_final = samplesLIN
+        
+        # print(type(samplesLIN_final))
+        # print(samplesLIN_final.shape)
     
     #Stitching together all sample matrix sets  
     i_LHS = 0 
@@ -153,25 +174,26 @@ def run():
     Headers = ["Variable Names"] 
     valRange = np.zeros((NumVar,2)) 
     valSelect = []
-    # linCount = []
+    sampleCount = []
     for i in range(NumVar):
         print(f"Processing variable {i}")
-        valSelectStrat = str(input("Data selection strategy (LHS - Latin Hypercube, LIN - linspace, CON - constant)\n>>"))
-        Name = str(input("What would you like to call the variable? \n>> ")) 
+        valSelectStrat = str(input("\tData selection strategy (LHS - Latin Hypercube, LIN - linspace, CON - constant)\n>>"))
+        Name = str(input("\tWhat would you like to call the variable? \n>> ")) 
         
-        if valSelectStrat == 'LHS' or valSelectStrat == 'LIN':
-            Lower = float(input("What is the lower bounds of this variable\n>> "))
-            Upper = float(input("What is the upper bounds of this variable\n>> "))
+        if valSelectStrat == 'LHS':
+            Lower = float(input("\tWhat is the lower bounds of this variable\n>> "))
+            Upper = float(input("\tWhat is the upper bounds of this variable\n>> "))
             valRange[i,0] = Lower 
             valRange[i,1] = Upper 
-        # elif valSelectStrat == 'LIN':
-        #     #Need to add this section otherwise LHS and LIN are the same. Need to seperate
-        #     Lower = float(input("What is the lower bounds of this variable\n>> "))
-        #     Upper = float(input("What is the upper bounds of this variable\n>> "))
-        #     valRange[i,0] = Lower 
-        #     valRange[i,1] = Upper 
+        elif valSelectStrat == 'LIN':
+            #Need to add this section otherwise LHS and LIN are the same. Need to seperate
+            Lower = float(input("\tWhat is the lower bounds of this variable\n>> "))
+            Upper = float(input("\tWhat is the upper bounds of this variable\n>> "))
+            sampleCount.append(int(input("How many increments for this variable\n>>")))
+            valRange[i,0] = Lower 
+            valRange[i,1] = Upper 
         else:
-            Lower = float(input("What is the constant value\n>> "))
+            Lower = float(input("\tWhat is the constant value\n>> "))
             valRange[i,0] = Lower 
         
         Headers.append(Name) 
@@ -195,7 +217,7 @@ def run():
     print("Generating batch cases...") 
     
     samplesLHS = scaledLHS(NumSamples, valRange_LHS) #LHS cases 
-    samplesLIN = scaledLIN(NumSamples, valRange_LIN) #LIN cases 
+    samplesLIN = scaledLIN(NumSamples, valRange_LIN, sampleCount) #LIN cases 
     
     samples = joinSamples(samplesLHS, samplesLIN, valRange_CON, valSelect)
     
@@ -227,3 +249,7 @@ if __name__ == "__main__":
     # print(a.shape)
 
     
+    
+    
+#FUTURE TODO:
+# -Have some kind of design space visualization tool (how well are the samples representing the space?) 
